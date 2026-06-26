@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-exclude = [".venv", "migrations"]
+exclude = [".venv", "migrations", "transactions/seed.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
@@ -16,7 +16,7 @@ known-first-party = ["config", "transactions"]
 [tool.mypy]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main"]
-exclude = [".venv", "migrations"]
+exclude = [".venv", "migrations", "transactions/seed.py"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings"

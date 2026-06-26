@@ -16,8 +16,8 @@ from transactions.models import (
 
 class CategoryModelTests(TestCase):
     def setUp(self) -> None:
-        self.withdrawal_type = TransactionType.objects.get(name="Withdrawal")
-        self.deposit_type = TransactionType.objects.get(name="Deposit")
+        self.withdrawal_type = TransactionType.objects.get(name="Списание")
+        self.deposit_type = TransactionType.objects.get(name="Пополнение")
 
     def test_create_root_category(self):
         category = Category.objects.create(
@@ -89,11 +89,11 @@ class CategoryModelTests(TestCase):
 
 class TransactionModelTests(TestCase):
     def setUp(self) -> None:
-        self.business_status = TransactionStatus.objects.get(name="Business")
-        self.personal_status = TransactionStatus.objects.get(name="Personal")
-        self.tax_status = TransactionStatus.objects.get(name="Tax")
-        self.withdrawal_type = TransactionType.objects.get(name="Withdrawal")
-        self.deposit_type = TransactionType.objects.get(name="Deposit")
+        self.business_status = TransactionStatus.objects.get(name="Бизнес")
+        self.personal_status = TransactionStatus.objects.get(name="Личное")
+        self.tax_status = TransactionStatus.objects.get(name="Налог")
+        self.withdrawal_type = TransactionType.objects.get(name="Списание")
+        self.deposit_type = TransactionType.objects.get(name="Пополнение")
 
         withdrawal_root = Category.objects.create(
             name="Marketing",
@@ -173,9 +173,9 @@ class TransactionModelTests(TestCase):
 
 class TransactionFormTests(TestCase):
     def setUp(self) -> None:
-        self.business_status = TransactionStatus.objects.get(name="Business")
-        self.withdrawal_type = TransactionType.objects.get(name="Withdrawal")
-        self.deposit_type = TransactionType.objects.get(name="Deposit")
+        self.business_status = TransactionStatus.objects.get(name="Бизнес")
+        self.withdrawal_type = TransactionType.objects.get(name="Списание")
+        self.deposit_type = TransactionType.objects.get(name="Пополнение")
 
         self.withdrawal_root = Category.objects.create(
             name="Marketing",
@@ -255,3 +255,21 @@ class TransactionFormTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("category", form.errors)
+
+
+class SeedTests(TestCase):
+    def test_seed_creates_reference_data(self) -> None:
+        self.assertEqual(TransactionStatus.objects.count(), 3)
+        self.assertEqual(TransactionType.objects.count(), 2)
+        self.assertEqual(Category.objects.filter(parent__isnull=True).count(), 4)
+        self.assertEqual(Category.objects.filter(parent__isnull=False).count(), 8)
+        self.assertEqual(Transaction.objects.count(), 14)
+
+    def test_seed_is_idempotent(self) -> None:
+        from transactions.seed import seed_database
+
+        count_before = Transaction.objects.count()
+        category_count_before = Category.objects.count()
+        seed_database()
+        self.assertEqual(Transaction.objects.count(), count_before)
+        self.assertEqual(Category.objects.count(), category_count_before)

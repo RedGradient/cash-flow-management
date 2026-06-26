@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # Built-in apps
-    "transactions",
+    "transactions.apps.TransactionsConfig",
     # Thir-party apps
     "rest_framework",
 ]
