@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
 from django.test import TestCase
 
-from transactions.forms import TransactionForm
+from transactions.forms import TransactionFilterForm, TransactionForm
 from transactions.models import (
     Category,
     Transaction,
@@ -251,6 +251,78 @@ class TransactionFormTests(TestCase):
                 root_category=self.deposit_root,
                 subcategory=self.withdrawal_subcategory,
             )
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("category", form.errors)
+
+
+class TransactionFilterFormTests(TestCase):
+    def setUp(self) -> None:
+        self.withdrawal_type = TransactionType.objects.get(name="Списание")
+        self.deposit_type = TransactionType.objects.get(name="Пополнение")
+
+        self.withdrawal_root = Category.objects.create(
+            name="Marketing",
+            type=self.withdrawal_type,
+        )
+        self.withdrawal_subcategory = Category.objects.create(
+            name="Farpost",
+            parent=self.withdrawal_root,
+        )
+        self.deposit_root = Category.objects.create(
+            name="Income",
+            type=self.deposit_type,
+        )
+
+    def _field_queryset(self, form: TransactionFilterForm, name: str):
+        queryset = form._model_choice_field(name).queryset
+        assert queryset is not None
+        return queryset
+
+    def test_category_queryset_empty_without_type(self) -> None:
+        form = TransactionFilterForm(data={})
+
+        self.assertEqual(list(self._field_queryset(form, "category")), [])
+
+    def test_category_queryset_filtered_by_type(self) -> None:
+        form = TransactionFilterForm(
+            data={
+                "type": str(self.withdrawal_type.pk),
+            }
+        )
+
+        self.assertTrue(form.is_valid())
+        category_queryset = self._field_queryset(form, "category")
+        category_ids = list(category_queryset.values_list("id", flat=True))
+        self.assertIn(self.withdrawal_root.pk, category_ids)
+        self.assertTrue(
+            all(
+                category.type_id == self.withdrawal_type.pk
+                for category in category_queryset
+            )
+        )
+
+    def test_subcategory_queryset_filtered_by_category(self) -> None:
+        form = TransactionFilterForm(
+            data={
+                "type": str(self.withdrawal_type.pk),
+                "category": str(self.withdrawal_root.pk),
+            }
+        )
+
+        self.assertTrue(form.is_valid())
+        subcategory_ids = list(
+            self._field_queryset(form, "subcategory").values_list("id", flat=True)
+        )
+        self.assertEqual(subcategory_ids, [self.withdrawal_subcategory.pk])
+
+    def test_mismatched_category_and_type_is_invalid(self) -> None:
+        form = TransactionFilterForm(
+            data={
+                "type": str(self.deposit_type.pk),
+                "category": str(self.withdrawal_root.pk),
+            }
         )
 
         self.assertFalse(form.is_valid())

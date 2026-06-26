@@ -31,22 +31,89 @@ class TransactionFilterForm(forms.Form):
         queryset=TransactionType.objects.all(),
         required=False,
         empty_label="Все типы",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        label="Тип",
+        widget=forms.Select(attrs={"class": "form-select", "id": "filter-type"}),
     )
     category = forms.ModelChoiceField(
-        queryset=Category.objects.filter(parent__isnull=True),
+        queryset=Category.objects.none(),
         required=False,
         empty_label="Все категории",
         label="Категория",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.Select(attrs={"class": "form-select", "id": "filter-category"}),
     )
     subcategory = forms.ModelChoiceField(
-        queryset=Category.objects.filter(parent__isnull=False),
+        queryset=Category.objects.none(),
         required=False,
         empty_label="Все подкатегории",
         label="Подкатегория",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.Select(attrs={"class": "form-select", "id": "filter-subcategory"}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        type_id = self._selected_int("type")
+        category_id = self._selected_int("category")
+        category_field = self._model_choice_field("category")
+        subcategory_field = self._model_choice_field("subcategory")
+
+        if type_id:
+            category_field.queryset = Category.objects.filter(
+                parent__isnull=True,
+                type_id=type_id,
+            )
+        else:
+            category_field.queryset = Category.objects.none()
+
+        if type_id and category_id:
+            subcategory_field.queryset = Category.objects.filter(
+                parent_id=category_id,
+                parent__type_id=type_id,
+            )
+        else:
+            subcategory_field.queryset = Category.objects.none()
+
+    def _model_choice_field(self, name: str) -> forms.ModelChoiceField:
+        field = self.fields[name]
+        if not isinstance(field, forms.ModelChoiceField):
+            raise TypeError(f"Field {name} must be a ModelChoiceField.")
+        return field
+
+    def _selected_int(self, name: str) -> int | None:
+        if self.data is None:
+            return None
+        raw_value = self.data.get(name)
+        if not raw_value:
+            return None
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+    def clean(self) -> dict[str, Any]:
+        super().clean()
+        cleaned_data: dict[str, Any] = self.cleaned_data
+        transaction_type = cleaned_data.get("type")
+        category = cleaned_data.get("category")
+        subcategory = cleaned_data.get("subcategory")
+
+        if category and transaction_type and category.type_id != transaction_type.id:
+            self.add_error("category", "Категория не соответствует выбранному типу.")
+        if category and subcategory and subcategory.parent_id != category.id:
+            self.add_error(
+                "subcategory",
+                "Подкатегория должна принадлежать выбранной категории.",
+            )
+        if (
+            subcategory
+            and transaction_type
+            and subcategory.effective_type() != transaction_type
+        ):
+            self.add_error(
+                "subcategory",
+                "Подкатегория не соответствует выбранному типу.",
+            )
+        return cleaned_data
 
 
 class TransactionForm(forms.ModelForm):

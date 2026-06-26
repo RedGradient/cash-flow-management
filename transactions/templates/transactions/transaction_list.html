@@ -23,7 +23,7 @@
             {{ filter_form.status }}
         </div>
         <div class="col-md-3">
-            <label class="form-label">Тип</label>
+            <label class="form-label">{{ filter_form.type.label }}</label>
             {{ filter_form.type }}
         </div>
         <div class="col-md-3">
@@ -81,4 +81,134 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const typeSelect = document.getElementById("filter-type");
+    const categorySelect = document.getElementById("filter-category");
+    const subcategorySelect = document.getElementById("filter-subcategory");
+
+    const EMPTY_LABELS = {
+        category: "Все категории",
+        subcategory: "Все подкатегории",
+    };
+
+    const initialCategory = categorySelect.value;
+    const initialSubcategory = subcategorySelect.value;
+
+    function setSelectOptions(select, items, emptyLabel, currentValue) {
+        select.innerHTML = "";
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = emptyLabel;
+        select.appendChild(emptyOption);
+
+        for (const item of items) {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name;
+            select.appendChild(option);
+        }
+
+        if (currentValue && items.some((item) => String(item.id) === String(currentValue))) {
+            select.value = currentValue;
+        } else {
+            select.value = "";
+        }
+    }
+
+    function clearCategories() {
+        setSelectOptions(categorySelect, [], EMPTY_LABELS.category, "");
+    }
+
+    function clearSubcategories() {
+        setSelectOptions(subcategorySelect, [], EMPTY_LABELS.subcategory, "");
+    }
+
+    function updateDisabledState() {
+        const hasType = Boolean(typeSelect.value);
+        const hasCategory = Boolean(categorySelect.value);
+        categorySelect.disabled = !hasType;
+        subcategorySelect.disabled = !hasType || !hasCategory;
+    }
+
+    async function loadCategories(
+        preserveCategoryId = "",
+        preserveSubcategoryId = "",
+    ) {
+        const typeId = typeSelect.value;
+        if (!typeId) {
+            clearCategories();
+            clearSubcategories();
+            updateDisabledState();
+            return;
+        }
+
+        const response = await fetch(
+            `{% url 'categories_api' %}?type=${encodeURIComponent(typeId)}`
+        );
+        const items = await response.json();
+        setSelectOptions(
+            categorySelect,
+            items,
+            EMPTY_LABELS.category,
+            preserveCategoryId || categorySelect.value
+        );
+        if (!categorySelect.value) {
+            clearSubcategories();
+        } else {
+            await loadSubcategories(preserveSubcategoryId);
+        }
+        updateDisabledState();
+    }
+
+    async function loadSubcategories(preserveSubcategoryId = "") {
+        const parentId = categorySelect.value;
+        const typeId = typeSelect.value;
+
+        if (!parentId || !typeId) {
+            clearSubcategories();
+            updateDisabledState();
+            return;
+        }
+
+        const params = new URLSearchParams({
+            parent: parentId,
+            type: typeId,
+        });
+        const response = await fetch(
+            `{% url 'subcategories_api' %}?${params.toString()}`
+        );
+        const items = await response.json();
+        setSelectOptions(
+            subcategorySelect,
+            items,
+            EMPTY_LABELS.subcategory,
+            preserveSubcategoryId || subcategorySelect.value
+        );
+        updateDisabledState();
+    }
+
+    typeSelect.addEventListener("change", async () => {
+        clearCategories();
+        clearSubcategories();
+        await loadCategories();
+    });
+
+    categorySelect.addEventListener("change", async () => {
+        clearSubcategories();
+        await loadSubcategories();
+    });
+
+    (async () => {
+        if (typeSelect.value) {
+            await loadCategories(initialCategory, initialSubcategory);
+        } else {
+            clearCategories();
+            clearSubcategories();
+            updateDisabledState();
+        }
+    })();
+</script>
 {% endblock %}
