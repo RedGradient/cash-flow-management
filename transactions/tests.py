@@ -333,9 +333,13 @@ class SeedTests(TestCase):
     def test_seed_creates_reference_data(self) -> None:
         self.assertEqual(TransactionStatus.objects.count(), 3)
         self.assertEqual(TransactionType.objects.count(), 2)
-        self.assertEqual(Category.objects.filter(parent__isnull=True).count(), 4)
-        self.assertEqual(Category.objects.filter(parent__isnull=False).count(), 8)
-        self.assertEqual(Transaction.objects.count(), 14)
+        self.assertEqual(Category.objects.filter(parent__isnull=True).count(), 5)
+        self.assertEqual(Category.objects.filter(parent__isnull=False).count(), 10)
+        self.assertEqual(Transaction.objects.count(), 18)
+        self.assertEqual(
+            Transaction.objects.filter(type__name="Пополнение").count(),
+            4,
+        )
 
     def test_seed_is_idempotent(self) -> None:
         from transactions.seed import seed_database

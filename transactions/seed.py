@@ -15,14 +15,21 @@ WITHDRAWAL_CATEGORIES: dict[str, list[str]] = {
     "Операционные": ["Банк", "Офис"],
 }
 
+DEPOSIT_CATEGORIES: dict[str, list[str]] = {
+    "Доходы": ["Продажи", "Возвраты"],
+}
 
-def _seed_withdrawal_categories(withdrawal: TransactionType) -> dict[str, Category]:
+
+def _seed_categories(
+    category_tree: dict[str, list[str]],
+    transaction_type: TransactionType,
+) -> dict[str, Category]:
     subcategories: dict[str, Category] = {}
-    for root_name, children in WITHDRAWAL_CATEGORIES.items():
+    for root_name, children in category_tree.items():
         root, _ = Category.objects.get_or_create(
             name=root_name,
             parent=None,
-            defaults={"type": withdrawal},
+            defaults={"type": transaction_type},
         )
         for child_name in children:
             subcategory, _ = Category.objects.get_or_create(
@@ -35,22 +42,25 @@ def _seed_withdrawal_categories(withdrawal: TransactionType) -> dict[str, Catego
 
 def seed_database() -> None:
     withdrawal, _ = TransactionType.objects.get_or_create(name="Списание")
-    TransactionType.objects.get_or_create(name="Пополнение")
+    deposit, _ = TransactionType.objects.get_or_create(name="Пополнение")
 
     business, _ = TransactionStatus.objects.get_or_create(name="Бизнес")
     personal, _ = TransactionStatus.objects.get_or_create(name="Личное")
     tax, _ = TransactionStatus.objects.get_or_create(name="Налог")
 
-    subcategories = _seed_withdrawal_categories(withdrawal)
+    withdrawal_subcategories = _seed_categories(WITHDRAWAL_CATEGORIES, withdrawal)
+    deposit_subcategories = _seed_categories(DEPOSIT_CATEGORIES, deposit)
 
-    vps = subcategories["VPS"]
-    proxy = subcategories["Proxy"]
-    farpost = subcategories["Farpost"]
-    avito = subcategories["Avito"]
-    salary = subcategories["Зарплата"]
-    freelance = subcategories["Фриланс"]
-    bank = subcategories["Банк"]
-    office = subcategories["Офис"]
+    vps = withdrawal_subcategories["VPS"]
+    proxy = withdrawal_subcategories["Proxy"]
+    farpost = withdrawal_subcategories["Farpost"]
+    avito = withdrawal_subcategories["Avito"]
+    salary = withdrawal_subcategories["Зарплата"]
+    freelance = withdrawal_subcategories["Фриланс"]
+    bank = withdrawal_subcategories["Банк"]
+    office = withdrawal_subcategories["Офис"]
+    sales = deposit_subcategories["Продажи"]
+    refunds = deposit_subcategories["Возвраты"]
 
     samples = [
         (date(2026, 1, 5), Decimal("890.00"), business, withdrawal, vps, "Оплата VPS"),
@@ -67,6 +77,10 @@ def seed_database() -> None:
         (date(2026, 3, 12), Decimal("8000.00"), business, withdrawal, freelance, "Дизайн лендинга"),
         (date(2026, 3, 15), Decimal("500.00"), business, withdrawal, bank, "Комиссия банка"),
         (date(2026, 3, 18), Decimal("3500.00"), business, withdrawal, office, "Канцтовары и вода"),
+        (date(2026, 2, 20), Decimal("15000.00"), business, deposit, sales, "Оплата заказа клиента"),
+        (date(2026, 2, 25), Decimal("5000.00"), business, deposit, refunds, "Возврат от Farpost"),
+        (date(2026, 3, 20), Decimal("22000.00"), business, deposit, sales, "Продажи — март"),
+        (date(2026, 3, 22), Decimal("1200.00"), personal, deposit, refunds, "Личный возврат"),
     ]
 
     for transaction_date, amount, status, tx_type, category, comment in samples:
