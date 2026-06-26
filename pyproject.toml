@@ -20,3 +20,7 @@ exclude = [".venv", "migrations"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings"
+
+[[tool.mypy.overrides]]
+module = ["rest_framework.*"]
+ignore_missing_imports = true

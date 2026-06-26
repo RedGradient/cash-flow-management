@@ -8,9 +8,28 @@ from django.db import models
 from django.db.models import Q
 
 
-class TransactionType(models.TextChoices):
-    DEPOSIT = "Deposit"
-    WITHDRAWAL = "Withdrawal"
+class TransactionStatus(models.Model):
+    class Meta:
+        db_table = "transaction_statuses"
+        verbose_name = "Status"
+        verbose_name_plural = "Statuses"
+
+    name: models.CharField[str, str] = models.CharField(max_length=50, unique=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TransactionType(models.Model):
+    class Meta:
+        db_table = "transaction_types"
+        verbose_name = "Type"
+        verbose_name_plural = "Types"
+
+    name: models.CharField[str, str] = models.CharField(max_length=50, unique=True)
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Category(models.Model):
@@ -36,6 +55,7 @@ class Category(models.Model):
             )
         ]
 
+    id: int
     name: models.CharField[str, str] = models.CharField(max_length=100)
     parent: models.ForeignKey[Category | None, Category | None] = models.ForeignKey(
         "self",
@@ -44,12 +64,17 @@ class Category(models.Model):
         on_delete=models.CASCADE,
         related_name="children",
     )
-    type: models.CharField[str | None, str | None] = models.CharField(
-        max_length=50,
-        choices=TransactionType.choices,
-        null=True,
-        blank=True,
+    parent_id: int | None
+    type: models.ForeignKey[TransactionType | None, TransactionType | None] = (
+        models.ForeignKey(
+            TransactionType,
+            null=True,
+            blank=True,
+            on_delete=models.PROTECT,
+            related_name="categories",
+        )
     )
+    type_id: int | None
 
     def clean(self) -> None:
         if (
@@ -58,39 +83,36 @@ class Category(models.Model):
             and self.parent.is_subcategory()
         ):
             raise ValidationError("Only two levels allowed.")
-        if self.is_root_category() and not self.type:
+        if self.is_root_category() and not self.type_id:
             raise ValidationError("Root category must have a type.")
 
-    # Переопределяем save, чтобы валидация clean выполнялась
-    # при добавлении модели через ORM
     def save(self, *args, **kwargs) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         """
-        Строковое представление категории для админки и консоли.
-
-        Примеры:
-            «Инфраструктура»              # корневая категория
-            «Инфраструктура → VPS»        # подкатегория
+        Корневая категория: ``«Маркетинг»``.
+        Подкатегория: ``«Маркетинг → Farpost»``.
         """
         if self.parent:
             return f"{self.parent.name} → {self.name}"
         return self.name
 
-    def type_value(self) -> str | None:
+    def type_value(self) -> TransactionType | None:
         """Возвращает значение поля ``type`` этой записи в БД."""
         return self.type
 
-    def effective_type(self) -> str | None:
+    def effective_type(self) -> TransactionType | None:
         """
         Возвращает тип категории для сопоставления с типом транзакции.
 
         Для корневой категории — её собственный ``type``.
-        Для подкатегории — ``type`` родителя, даже если своё поле ``type`` пустое.
+        Для подкатегории — ``type`` родителя.
         """
-        return self.parent.type if self.parent else self.type
+        if self.parent:
+            return self.parent.type
+        return self.type
 
     def is_root_category(self) -> bool:
         return self.parent is None
@@ -103,58 +125,55 @@ class Transaction(models.Model):
     class Meta:
         db_table = "transactions"
 
-    class Status(models.TextChoices):
-        BUSINESS = "Business"
-        PERSONAL = "Personal"
-        TAX = "Tax"
-
+    id: int
+    date: models.DateField[datetime, datetime] = models.DateField()
     amount: models.DecimalField[Decimal, Decimal] = models.DecimalField(
         max_digits=10,
         decimal_places=2,
     )
-    status: models.CharField[str, str] = models.CharField(
-        max_length=50,
-        choices=Status.choices,
+    status: models.ForeignKey[TransactionStatus, TransactionStatus] = models.ForeignKey(
+        TransactionStatus,
+        on_delete=models.PROTECT,
+        related_name="transactions",
     )
-    type: models.CharField[str, str] = models.CharField(
-        max_length=50,
-        choices=TransactionType.choices,
+    status_id: int | None
+    type: models.ForeignKey[TransactionType, TransactionType] = models.ForeignKey(
+        TransactionType,
+        on_delete=models.PROTECT,
+        related_name="transactions",
     )
+    type_id: int | None
     category: models.ForeignKey[Category, Category] = models.ForeignKey(
         Category,
-        null=False,
-        blank=False,
         on_delete=models.PROTECT,
+        related_name="transactions",
     )
+    category_id: int | None
     comment: models.CharField[str, str] = models.CharField(max_length=100, blank=True)
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(
         auto_now_add=True,
     )
 
     def clean(self) -> None:
-        # Категория должна быть подкатегорией, а не корневой
+        if not self.category_id:
+            return
         if self.category.is_root_category():
             raise ValidationError(
                 "Transaction must be linked to a subcategory, not a category."
             )
-        # Тип категории (точнее, подкатегории) должен соответствовать типу транзакции
         if self.category.effective_type() != self.type:
             raise ValidationError(
                 f"Category type '{self.category.effective_type()}' does not match "
                 f"transaction type '{self.type}'."
             )
 
-    # Переопределяем save, чтобы валидация clean выполнялась
-    # при добавлении модели через ORM
     def save(self, *args, **kwargs) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         """
-        Строковое представление транзакции для админки и консоли.
-
-        Пример:
-            «Deposit — 1500.00 rub. (Business)»
+        Формат: ``«Withdrawal — 1500.00 rub. (Business)»`` —
+        тип, сумма и статус операции.
         """
         return f"{self.type} — {self.amount} rub. ({self.status})"

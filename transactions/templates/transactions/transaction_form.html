@@ -1,0 +1,192 @@
+{% extends "transactions/base.html" %}
+
+{% block title %}{{ title }} — ДДС{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">{{ title }}</h1>
+
+<form method="post" id="transaction-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div id="client-validation-errors" class="alert alert-danger d-none"></div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label">{{ form.date.label }}</label>
+            {{ form.date }}
+            {{ form.date.errors }}
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">{{ form.status.label }}</label>
+            {{ form.status }}
+            {{ form.status.errors }}
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">{{ form.type.label }}</label>
+            {{ form.type }}
+            {{ form.type.errors }}
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">{{ form.root_category.label }}</label>
+            {{ form.root_category }}
+            {{ form.root_category.errors }}
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">{{ form.category.label }}</label>
+            {{ form.category }}
+            {{ form.category.errors }}
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">{{ form.amount.label }}</label>
+            {{ form.amount }}
+            {{ form.amount.errors }}
+        </div>
+        <div class="col-12">
+            <label class="form-label">{{ form.comment.label }}</label>
+            {{ form.comment }}
+            {{ form.comment.errors }}
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{% url 'transaction_list' %}" class="btn btn-outline-secondary">Отмена</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const form = document.getElementById("transaction-form");
+    const rootCategorySelect = document.getElementById("root-category");
+    const typeSelect = document.getElementById("transaction-type");
+    const subcategorySelect = document.getElementById("subcategory");
+    const amountInput = document.getElementById("transaction-amount");
+    const clientErrors = document.getElementById("client-validation-errors");
+    const EMPTY_LABEL = "---------";
+
+    function setSelectOptions(select, items, currentValue) {
+        select.innerHTML = "";
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = EMPTY_LABEL;
+        select.appendChild(emptyOption);
+
+        for (const item of items) {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name;
+            select.appendChild(option);
+        }
+
+        if (currentValue && items.some((item) => String(item.id) === String(currentValue))) {
+            select.value = currentValue;
+        } else {
+            select.value = "";
+        }
+    }
+
+    function clearRootCategories() {
+        setSelectOptions(rootCategorySelect, [], "");
+    }
+
+    function clearSubcategories() {
+        setSelectOptions(subcategorySelect, [], "");
+    }
+
+    async function loadRootCategories() {
+        const typeId = typeSelect.value;
+        if (!typeId) {
+            clearRootCategories();
+            clearSubcategories();
+            return;
+        }
+
+        const response = await fetch(
+            `{% url 'categories_api' %}?type=${encodeURIComponent(typeId)}`
+        );
+        const items = await response.json();
+        setSelectOptions(rootCategorySelect, items, rootCategorySelect.value);
+        if (!rootCategorySelect.value) {
+            clearSubcategories();
+        } else {
+            await loadSubcategories();
+        }
+    }
+
+    async function loadSubcategories() {
+        const parentId = rootCategorySelect.value;
+        const typeId = typeSelect.value;
+
+        if (!parentId || !typeId) {
+            clearSubcategories();
+            return;
+        }
+
+        const params = new URLSearchParams({
+            parent: parentId,
+            type: typeId,
+        });
+        const response = await fetch(
+            `{% url 'subcategories_api' %}?${params.toString()}`
+        );
+        const items = await response.json();
+        setSelectOptions(subcategorySelect, items, subcategorySelect.value);
+    }
+
+    function hideClientErrors() {
+        clientErrors.classList.add("d-none");
+        clientErrors.textContent = "";
+    }
+
+    function showClientErrors(messages) {
+        clientErrors.textContent = messages.join(" ");
+        clientErrors.classList.remove("d-none");
+    }
+
+    function validateClient() {
+        const errors = [];
+
+        if (!typeSelect.value) {
+            errors.push("Укажите тип.");
+        }
+        if (!rootCategorySelect.value) {
+            errors.push("Укажите категорию.");
+        }
+        if (!subcategorySelect.value) {
+            errors.push("Укажите подкатегорию.");
+        }
+        if (!amountInput.value.trim()) {
+            errors.push("Укажите сумму.");
+        }
+
+        if (errors.length > 0) {
+            showClientErrors(errors);
+            return false;
+        }
+
+        hideClientErrors();
+        return true;
+    }
+
+    typeSelect.addEventListener("change", async () => {
+        clearRootCategories();
+        clearSubcategories();
+        await loadRootCategories();
+    });
+
+    rootCategorySelect.addEventListener("change", loadSubcategories);
+
+    form.addEventListener("submit", (event) => {
+        if (!validateClient()) {
+            event.preventDefault();
+        }
+    });
+
+    loadRootCategories();
+</script>
+{% endblock %}
