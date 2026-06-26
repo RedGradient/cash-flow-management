@@ -18,6 +18,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from config.admin import setup_dev_admin_without_auth
+
+setup_dev_admin_without_auth()
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("transactions.api_urls")),

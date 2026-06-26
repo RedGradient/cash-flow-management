@@ -11,6 +11,7 @@
         <div class="container">
             <a class="navbar-brand" href="{% url 'transaction_list' %}">ДДС</a>
             <div class="navbar-nav">
+                <a class="nav-link text-warning" href="{% url 'admin:index' %}">Админка</a>
                 <a class="nav-link" href="{% url 'transaction_list' %}">Операции</a>
                 <a class="nav-link" href="{% url 'transaction_create' %}">Новая операция</a>
                 <a class="nav-link" href="{% url 'reference_manage' %}">Справочники</a>
